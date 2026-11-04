@@ -23,6 +23,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -44,6 +45,8 @@ final class NowPlaying extends MediaController.Callback implements MediaSessionM
     private final MediaSessionManager sessions;
     private final ComponentName listener;
     private final List<MediaController> watched = new ArrayList<>();
+    /** Sessions seen playing while Home was up: an app's leftover pause from days ago is not shown. */
+    private final HashSet<Object> heardPlaying = new HashSet<>();
     private final Lead lead, miniLead;
     /** Browsing the apps below the dock: the pill in the top bar instead of the bar. */
     private boolean compact;
@@ -192,8 +195,14 @@ final class NowPlaying extends MediaController.Callback implements MediaSessionM
                 if (s != PlaybackState.STATE_PLAYING || !dismissedPaused) continue;
                 dismissed = null;
             }
-            if (s == PlaybackState.STATE_PLAYING) { pick = c; break; }
-            if (pick == null && s == PlaybackState.STATE_PAUSED) pick = c;
+            if (s == PlaybackState.STATE_PLAYING) {
+                heardPlaying.add(c.getSessionToken());
+                pick = c;
+                break;
+            }
+            PlaybackState p = c.getPlaybackState();
+            if (pick == null && s == PlaybackState.STATE_PAUSED && heardPlaying.contains(c.getSessionToken())
+                    && SystemClock.elapsedRealtime() - p.getLastPositionUpdateTime() < 30 * 60_000) pick = c;
         }
         current = pick;
         boolean wasGone = bar.getVisibility() == View.GONE, focused = hasFocus();
